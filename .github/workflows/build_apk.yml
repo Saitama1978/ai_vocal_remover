@@ -28,14 +28,12 @@ jobs:
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Configure Android SDK 35 & Permissions
+      - name: Configure Android MinSdk & Permissions
         run: |
-          # Itakda ang compile at target SDK sa 35 para sumunod sa audioplayers plugin
+          # Itakda lamang ang tamang minSdk sa build.gradle
           if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/compileSdkVersion.*/compileSdkVersion 35/g' android/app/build.gradle || true
-            sed -i 's/targetSdkVersion.*/targetSdkVersion 35/g' android/app/build.gradle || true
-            sed -i 's/minSdk = .*/minSdk = 21/g' android/app/build.gradle || true
-            sed -i 's/minSdkVersion.*/minSdkVersion = 21/g' android/app/build.gradle || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
           fi
 
           # Magdagdag ng internet at storage permissions sa AndroidManifest.xml
@@ -45,7 +43,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate App Icons
-        run: flutter pub run flutter_launcher_icons:main
+        run: flutter pub run flutter_launcher_icons
 
       - name: Build Release APK
         run: flutter build apk --release --no-tree-shake-icons
