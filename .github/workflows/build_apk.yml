@@ -19,18 +19,22 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter (Stable 3.22.2)
+      - name: Setup Flutter (Stable 3.19.0)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.2'
+          flutter-version: '3.19.0'
           channel: 'stable'
 
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Configure Android MinSdk & Permissions
+      - name: Configure Android Properties & Permissions
         run: |
-          # Itakda lamang ang tamang minSdk sa build.gradle para maiwasan ang extension error
+          # Gumawa o mag-update ng gradle.properties para sa AndroidX at JVM args
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+
+          # Ayusin ang minSdk sa build.gradle
           if [ -f "android/app/build.gradle" ]; then
             sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
@@ -46,7 +50,7 @@ jobs:
         run: flutter pub run flutter_launcher_icons:main
 
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --no-tree-shake-icons
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
