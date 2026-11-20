@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:json' if (dart.library.html) 'ignored_json.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -67,7 +66,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Naka-hardcode na ang iyong personal Hugging Face Space URL dito para hindi na i-type!
+  // Naka-hardcode na ang iyong personal Hugging Face Space URL dito
   final String _hardcodedApiUrl = 'https://saitama1978-vocal-remover.hf.space';
 
   String? _inputFilePath;
@@ -247,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  @prototype
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -285,7 +284,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Status Card na may magandang disenyo
                     Card(
                       elevation: 4,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -305,124 +303,4 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
-
-                    // File Picker Button
-                    OutlinedButton.icon(
-                      onPressed: _isProcessing ? null : _pickAudioFile,
-                      icon: const Icon(Icons.audio_file_rounded),
-                      label: Text(
-                        _inputFileName ?? 'Pumili ng Audio File (MP3, M4A, WAV)',
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Process Button
-                    FilledButton.icon(
-                      onPressed: (_inputFilePath == null || _isProcessing) ? null : _processAudio,
-                      icon: _isProcessing
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                            )
-                          : const Icon(Icons.auto_fix_high_rounded),
-                      label: Text(
-                        _isProcessing ? 'Pinoproseso ang Kanta...' : 'Ihiwalay ang Vocals at Minus One',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Result Cards
-                    if (_musicOutputPath != null) ...[
-                      _buildResultCard(
-                        title: 'Minus One (Instrumental)',
-                        subtitle: 'Handa nang i-download',
-                        icon: Icons.music_note_rounded,
-                        filePath: _musicOutputPath!,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_vocalOutputPath != null)
-                      _buildResultCard(
-                        title: 'Vocals Only (Boses Lang)',
-                        subtitle: 'Handa nang i-download',
-                        icon: Icons.mic_rounded,
-                        filePath: _vocalOutputPath!,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            // Footer Attribution
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Developed by Renante Fullo',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildResultCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required String filePath,
-  }) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-                ],
-              ),
-            ),
-            IconButton.filled(
-              icon: const Icon(Icons.download_rounded),
-              onPressed: () => _saveToDownloads(filePath),
-              tooltip: 'I-save sa Downloads',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+                    const SizedBox(height
