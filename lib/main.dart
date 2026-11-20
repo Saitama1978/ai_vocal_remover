@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:json' if (dart.library.html) 'ignored_json.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -35,12 +36,12 @@ class _VocalRemoverAppState extends State<VocalRemoverApp> {
       themeMode: _themeMode,
       theme: ThemeData(
         brightness: Brightness.light,
-        colorSchemeSeed: Colors.indigo,
+        colorSchemeSeed: Colors.deepPurple,
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        colorSchemeSeed: Colors.cyan,
+        colorSchemeSeed: Colors.cyanAccent,
         useMaterial3: true,
       ),
       home: HomeScreen(
@@ -66,11 +67,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Ilagay dito ang base URL ng iyong Hugging Face Space o Custom Server
-  // Halimbawa: https://username-demucs.hf.space
-  final TextEditingController _apiUrlController = TextEditingController(
-    text: 'https://your-space-name.hf.space',
-  );
+  // Naka-hardcode na ang iyong personal Hugging Face Space URL dito para hindi na i-type!
+  final String _hardcodedApiUrl = 'https://saitama1978-vocal-remover.hf.space';
 
   String? _inputFilePath;
   String? _inputFileName;
@@ -78,13 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _musicOutputPath;
 
   bool _isProcessing = false;
-  String _statusMessage = 'Pumili ng kanta (MP3, WAV, M4A) para ihiwalay ang boses.';
-
-  @override
-  void dispose() {
-    _apiUrlController.dispose();
-    super.dispose();
-  }
+  String _statusMessage = 'Pumili ng paboritong kanta (MP3, WAV, M4A) para simulang ihiwalay ang boses.';
 
   Future<void> _pickAudioFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -109,36 +101,32 @@ class _HomeScreenState extends State<HomeScreen> {
       _vocalOutputPath = null;
       _musicOutputPath = null;
       _isProcessing = false;
-      _statusMessage = 'Pumili ng kanta para simulan.';
+      _statusMessage = 'Pumili ng kanta para magsimula.';
     });
   }
 
-  /// Nagpapadala ng audio gamit ang Multipart Request (iwas HTTP 413 Payload Too Large)
   Future<void> _processAudio() async {
     if (_inputFilePath == null) return;
 
-    String baseUrl = _apiUrlController.text.trim();
+    String baseUrl = _hardcodedApiUrl;
     if (baseUrl.endsWith('/')) {
       baseUrl = baseUrl.substring(0, baseUrl.length - 1);
     }
-    // Alisin kung may nakakabit na /api/predict para malinis ang base URL
     baseUrl = baseUrl.replaceAll('/api/predict', '');
 
     setState(() {
       _isProcessing = true;
       _vocalOutputPath = null;
       _musicOutputPath = null;
-      _statusMessage = 'Ina-upload ang audio file sa server (Multipart)...';
+      _statusMessage = 'Ipinapadala ang kanta sa AI server... Sandali lang po.';
     });
 
     try {
-      // HAKBANG 1: I-upload ang file gamit ang MultipartRequest sa /upload (Gradio standard)
-      // Kung custom API endpoint ang gamit mo (hal. /separate), palitan ang Uri.parse('$baseUrl/upload')
       final uploadUri = Uri.parse('$baseUrl/upload');
       final request = http.MultipartRequest('POST', uploadUri);
       request.files.add(
         await http.MultipartFile.fromPath(
-          'files', // Field name para sa Gradio; palitan ng 'file' kung FastAPI/Flask
+          'files',
           _inputFilePath!,
           filename: _inputFileName,
         ),
@@ -150,23 +138,20 @@ class _HomeScreenState extends State<HomeScreen> {
       if (uploadResponse.statusCode != 200) {
         setState(() {
           _isProcessing = false;
-          _statusMessage =
-              'Nabigo ang upload (HTTP ${uploadResponse.statusCode}). Suriin ang API URL.';
+          _statusMessage = 'Nabigo ang pag-upload (HTTP ${uploadResponse.statusCode}). Pakitiyak na nagre-run ang iyong HF Space.';
         });
         return;
       }
 
-      // Kunin ang uploaded server file path mula sa response
       final uploadedData = jsonDecode(uploadResponse.body);
       final String serverFilePath = uploadedData is List
           ? uploadedData.first.toString()
           : (uploadedData['path'] ?? uploadedData['url'] ?? '').toString();
 
       setState(() {
-        _statusMessage = 'Pinoproseso ng AI ang paghihiwalay ng Vocals at Minus One...';
+        _statusMessage = 'Pinoproseso na ng AI ang musika at boses... (Maaaring tumagal ng ilang minuto)';
       });
 
-      // HAKBANG 2: I-trigger ang AI prediction gamit ang file reference (magaan na JSON payload)
       final predictResponse = await http.post(
         Uri.parse('$baseUrl/api/predict'),
         headers: {'Content-Type': 'application/json'},
@@ -193,24 +178,23 @@ class _HomeScreenState extends State<HomeScreen> {
           _vocalOutputPath = vocalOut;
           _musicOutputPath = musicOut;
           _isProcessing = false;
-          _statusMessage = 'Matagumpay na nahiwalay ang boses at musika!';
+          _statusMessage = 'Tagumpay! Hiwalay na ang Vocals at Minus One.';
         });
       } else {
         setState(() {
           _isProcessing = false;
-          _statusMessage =
-              'Error sa AI server (HTTP ${predictResponse.statusCode}). Subukan ulit.';
+          _statusMessage = 'Nagka-problema sa AI server (HTTP ${predictResponse.statusCode}). Subukan muli.';
         });
       }
     } on TimeoutException {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Nag-timeout ang server. Masyadong mahaba ang kanta o busy ang AI.';
+        _statusMessage = 'Nag-timeout ang server. Masyadong mahaba o mabigat ang kanta.';
       });
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Nabigo ang koneksyon: Siguraduhing active ang iyong Space URL.';
+        _statusMessage = 'Nabigo ang koneksyon sa server. Suriin ang iyong internet.';
       });
     }
   }
@@ -230,7 +214,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final res = await http.get(Uri.parse(raw));
       await File(outPath).writeAsBytes(res.bodyBytes);
     } else if (raw.isNotEmpty) {
-      // Gradio relative file path
       final fileUrl = '$baseUrl/file=$raw';
       final res = await http.get(Uri.parse(fileUrl));
       await File(outPath).writeAsBytes(res.bodyBytes);
@@ -251,144 +234,191 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Na-save sa Downloads: $fileName'),
-          backgroundColor: Colors.green.shade700,
+          content: Text('Nai-save na sa Download folder: $fileName'),
+          backgroundColor: Colors.teal.shade700,
+          behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sa pag-save: $e')),
+        SnackBar(content: Text('Hindi ma-save: $e')),
       );
     }
   }
 
-  @override
+  @prototype
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Vocal Remover'),
+        title: const Text('AI Vocal Remover', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            icon: Icon(widget.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
             onPressed: widget.onToggleTheme,
+            tooltip: 'Palitan ang Tema',
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: _resetAll,
+            tooltip: 'I-reset ang Lahat',
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: TextField(
-                        controller: _apiUrlController,
-                        decoration: const InputDecoration(
-                          labelText: 'AI Server Base URL (walang /api/predict)',
-                          hintText: 'https://username-demucs.hf.space',
-                          border: OutlineInputBorder(),
-                          isDense: true,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: widget.isDarkMode
+                ? [Colors.grey.shade900, Colors.black]
+                : [Colors.deepPurple.shade50, Colors.white],
+          ),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Status Card na may magandang disenyo
+                    Card(
+                      elevation: 4,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                _statusMessage,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    onPressed: _isProcessing ? null : _pickAudioFile,
-                    icon: const Icon(Icons.audio_file),
-                    label: Text(_inputFileName ?? 'Pumili ng Audio File'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    const SizedBox(height: 24),
+
+                    // File Picker Button
+                    OutlinedButton.icon(
+                      onPressed: _isProcessing ? null : _pickAudioFile,
+                      icon: const Icon(Icons.audio_file_rounded),
+                      label: Text(
+                        _inputFileName ?? 'Pumili ng Audio File (MP3, M4A, WAV)',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: (_inputFilePath == null || _isProcessing) ? null : _processAudio,
-                    icon: _isProcessing
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_fix_high),
-                    label: Text(
-                      _isProcessing ? 'Pinoproseso...' : 'Ihiwalay ang Vocals at Minus One',
+                    const SizedBox(height: 16),
+
+                    // Process Button
+                    FilledButton.icon(
+                      onPressed: (_inputFilePath == null || _isProcessing) ? null : _processAudio,
+                      icon: _isProcessing
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                            )
+                          : const Icon(Icons.auto_fix_high_rounded),
+                      label: Text(
+                        _isProcessing ? 'Pinoproseso ang Kanta...' : 'Ihiwalay ang Vocals at Minus One',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
                     ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    ),
-                    child: Text(_statusMessage, textAlign: TextAlign.center),
-                  ),
-                  const SizedBox(height: 20),
-                  if (_musicOutputPath != null)
-                    _buildResultCard(
-                      title: 'Minus One (Instrumental)',
-                      icon: Icons.music_note,
-                      filePath: _musicOutputPath!,
-                    ),
-                  if (_vocalOutputPath != null) ...[
-                    const SizedBox(height: 12),
-                    _buildResultCard(
-                      title: 'Vocals Only',
-                      icon: Icons.mic,
-                      filePath: _vocalOutputPath!,
-                    ),
+                    const SizedBox(height: 30),
+
+                    // Result Cards
+                    if (_musicOutputPath != null) ...[
+                      _buildResultCard(
+                        title: 'Minus One (Instrumental)',
+                        subtitle: 'Handa nang i-download',
+                        icon: Icons.music_note_rounded,
+                        filePath: _musicOutputPath!,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (_vocalOutputPath != null)
+                      _buildResultCard(
+                        title: 'Vocals Only (Boses Lang)',
+                        subtitle: 'Handa nang i-download',
+                        icon: Icons.mic_rounded,
+                        filePath: _vocalOutputPath!,
+                      ),
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: const Text(
-              'Developed by Renante Fullo',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            // Footer Attribution
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                'Developed by Renante Fullo',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade500,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildResultCard({
     required String title,
+    required String subtitle,
     required IconData icon,
     required String filePath,
   }) {
     return Card(
-      elevation: 2,
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            Icon(icon, size: 32),
-            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(width: 16),
             Expanded(
-              child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+                ],
+              ),
             ),
             IconButton.filled(
-              icon: const Icon(Icons.download),
+              icon: const Icon(Icons.download_rounded),
               onPressed: () => _saveToDownloads(filePath),
+              tooltip: 'I-save sa Downloads',
             ),
           ],
         ),
