@@ -19,25 +19,23 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter (Stable 3.19.0)
+      - name: Setup Flutter (Stable 3.22.2)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.22.2'
           channel: 'stable'
 
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Configure Android Properties & Permissions
+      - name: Configure Android SDK 35 & Permissions
         run: |
-          # Gumawa o mag-update ng gradle.properties para sa AndroidX at JVM args
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
-
-          # Ayusin ang minSdk sa build.gradle
+          # Itakda ang compile at target SDK sa 35 para sumunod sa audioplayers plugin
           if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
+            sed -i 's/compileSdkVersion.*/compileSdkVersion 35/g' android/app/build.gradle || true
+            sed -i 's/targetSdkVersion.*/targetSdkVersion 35/g' android/app/build.gradle || true
+            sed -i 's/minSdk = .*/minSdk = 21/g' android/app/build.gradle || true
+            sed -i 's/minSdkVersion.*/minSdkVersion = 21/g' android/app/build.gradle || true
           fi
 
           # Magdagdag ng internet at storage permissions sa AndroidManifest.xml
