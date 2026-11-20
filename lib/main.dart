@@ -33,9 +33,20 @@ class _VocalRemoverAppState extends State<VocalRemoverApp> {
       title: 'AI Vocal Remover',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-      theme: ThemeData(brightness: Brightness.light, colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      darkTheme: ThemeData(brightness: Brightness.dark, colorSchemeSeed: Colors.cyan, useMaterial3: true),
-      home: HomeScreen(isDarkMode: _themeMode == ThemeMode.dark, onToggleTheme: _toggleTheme),
+      theme: ThemeData(
+        brightness: Brightness.light,
+        colorSchemeSeed: Colors.indigo,
+        useMaterial3: true,
+      ),
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        colorSchemeSeed: Colors.cyan,
+        useMaterial3: true,
+      ),
+      home: HomeScreen(
+        isDarkMode: _themeMode == ThemeMode.dark,
+        onToggleTheme: _toggleTheme,
+      ),
     );
   }
 }
@@ -44,15 +55,21 @@ class HomeScreen extends StatefulWidget {
   final bool isDarkMode;
   final VoidCallback onToggleTheme;
 
-  const HomeScreen({super.key, required this.isDarkMode, required this.onToggleTheme});
+  const HomeScreen({
+    super.key,
+    required this.isDarkMode,
+    required this.onToggleTheme,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Ilagay dito ang base URL ng iyong Hugging Face Space o Custom Server
+  // Halimbawa: https://username-demucs.hf.space
   final TextEditingController _apiUrlController = TextEditingController(
-    text: 'https://hf.space/embed/abidlabs/music-separation/api/predict',
+    text: 'https://your-space-name.hf.space',
   );
 
   String? _inputFilePath;
@@ -70,7 +87,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pickAudioFile() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+    );
 
     if (result != null && result.files.single.path != null) {
       setState(() {
@@ -94,32 +113,72 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  /// Nagpapadala ng audio gamit ang Multipart Request (iwas HTTP 413 Payload Too Large)
   Future<void> _processAudio() async {
     if (_inputFilePath == null) return;
+
+    String baseUrl = _apiUrlController.text.trim();
+    if (baseUrl.endsWith('/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 1);
+    }
+    // Alisin kung may nakakabit na /api/predict para malinis ang base URL
+    baseUrl = baseUrl.replaceAll('/api/predict', '');
 
     setState(() {
       _isProcessing = true;
       _vocalOutputPath = null;
       _musicOutputPath = null;
-      _statusMessage = 'Nag-a-upload sa AI Cloud Engine... Maghintay ng ilang segundo.';
+      _statusMessage = 'Ina-upload ang audio file sa server (Multipart)...';
     });
 
     try {
-      final bytes = await File(_inputFilePath!).readAsBytes();
-      final base64Audio = 'data:audio/mp3;base64,${base64Encode(bytes)}';
+      // HAKBANG 1: I-upload ang file gamit ang MultipartRequest sa /upload (Gradio standard)
+      // Kung custom API endpoint ang gamit mo (hal. /separate), palitan ang Uri.parse('$baseUrl/upload')
+      final uploadUri = Uri.parse('$baseUrl/upload');
+      final request = http.MultipartRequest('POST', uploadUri);
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'files', // Field name para sa Gradio; palitan ng 'file' kung FastAPI/Flask
+          _inputFilePath!,
+          filename: _inputFileName,
+        ),
+      );
 
-      final response = await http.post(
-        Uri.parse(_apiUrlController.text.trim()),
+      final streamedResponse = await request.send().timeout(const Duration(minutes: 3));
+      final uploadResponse = await http.Response.fromStream(streamedResponse);
+
+      if (uploadResponse.statusCode != 200) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage =
+              'Nabigo ang upload (HTTP ${uploadResponse.statusCode}). Suriin ang API URL.';
+        });
+        return;
+      }
+
+      // Kunin ang uploaded server file path mula sa response
+      final uploadedData = jsonDecode(uploadResponse.body);
+      final String serverFilePath = uploadedData is List
+          ? uploadedData.first.toString()
+          : (uploadedData['path'] ?? uploadedData['url'] ?? '').toString();
+
+      setState(() {
+        _statusMessage = 'Pinoproseso ng AI ang paghihiwalay ng Vocals at Minus One...';
+      });
+
+      // HAKBANG 2: I-trigger ang AI prediction gamit ang file reference (magaan na JSON payload)
+      final predictResponse = await http.post(
+        Uri.parse('$baseUrl/api/predict'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'data': [
-            {'name': _inputFileName, 'data': base64Audio}
+            {'path': serverFilePath, 'orig_name': _inputFileName}
           ]
         }),
-      ).timeout(const Duration(minutes: 3));
+      ).timeout(const Duration(minutes: 4));
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+      if (predictResponse.statusCode == 200) {
+        final decoded = jsonDecode(predictResponse.body);
         final dataList = decoded['data'] as List;
 
         final tempDir = await getTemporaryDirectory();
@@ -127,8 +186,8 @@ class _HomeScreenState extends State<HomeScreen> {
         final vocalOut = '${tempDir.path}/${baseName}_Vocals.wav';
         final musicOut = '${tempDir.path}/${baseName}_MinusOne.wav';
 
-        await _saveFileFromData(dataList[0], vocalOut);
-        await _saveFileFromData(dataList[1], musicOut);
+        await _saveFileFromData(dataList[0], vocalOut, baseUrl);
+        await _saveFileFromData(dataList[1], musicOut, baseUrl);
 
         setState(() {
           _vocalOutputPath = vocalOut;
@@ -139,29 +198,46 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'Error sa server (HTTP ${response.statusCode}). Subukan ulit mamaya.';
+          _statusMessage =
+              'Error sa AI server (HTTP ${predictResponse.statusCode}). Subukan ulit.';
         });
       }
+    } on TimeoutException {
+      setState(() {
+        _isProcessing = false;
+        _statusMessage = 'Nag-timeout ang server. Masyadong mahaba ang kanta o busy ang AI.';
+      });
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Nabigo ang koneksyon. Suriin ang internet connection.';
+        _statusMessage = 'Nabigo ang koneksyon: Siguraduhing active ang iyong Space URL.';
       });
     }
   }
 
-  Future<void> _saveFileFromData(dynamic item, String outPath) async {
-    String raw = item is Map ? (item['data'] ?? item['url'] ?? '') : item.toString();
+  Future<void> _saveFileFromData(dynamic item, String outPath, String baseUrl) async {
+    String raw = '';
+    if (item is Map) {
+      raw = (item['url'] ?? item['path'] ?? item['data'] ?? '').toString();
+    } else {
+      raw = item.toString();
+    }
+
     if (raw.startsWith('data:')) {
       final base64Str = raw.split(',').last;
       await File(outPath).writeAsBytes(base64Decode(base64Str));
     } else if (raw.startsWith('http')) {
       final res = await http.get(Uri.parse(raw));
       await File(outPath).writeAsBytes(res.bodyBytes);
+    } else if (raw.isNotEmpty) {
+      // Gradio relative file path
+      final fileUrl = '$baseUrl/file=$raw';
+      final res = await http.get(Uri.parse(fileUrl));
+      await File(outPath).writeAsBytes(res.bodyBytes);
     }
   }
 
-  Future<void> _saveToDownloads(String sourcePath, String label) async {
+  Future<void> _saveToDownloads(String sourcePath) async {
     try {
       await Permission.storage.request();
       Directory downloadsDir = Directory('/storage/emulated/0/Download');
@@ -174,11 +250,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Na-save sa Downloads: $fileName'), backgroundColor: Colors.green.shade700),
+        SnackBar(
+          content: Text('Na-save sa Downloads: $fileName'),
+          backgroundColor: Colors.green.shade700,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error sa pag-save: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sa pag-save: $e')),
+      );
     }
   }
 
@@ -193,7 +274,10 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(widget.isDarkMode ? Icons.light_mode : Icons.dark_mode),
             onPressed: widget.onToggleTheme,
           ),
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _resetAll),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _resetAll,
+          ),
         ],
       ),
       body: Column(
@@ -210,7 +294,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: TextField(
                         controller: _apiUrlController,
                         decoration: const InputDecoration(
-                          labelText: 'AI Endpoint API URL',
+                          labelText: 'AI Server Base URL (walang /api/predict)',
+                          hintText: 'https://username-demucs.hf.space',
                           border: OutlineInputBorder(),
                           isDense: true,
                         ),
@@ -222,32 +307,50 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: _isProcessing ? null : _pickAudioFile,
                     icon: const Icon(Icons.audio_file),
                     label: Text(_inputFileName ?? 'Pumili ng Audio File'),
-                    style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
                     onPressed: (_inputFilePath == null || _isProcessing) ? null : _processAudio,
                     icon: _isProcessing
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.auto_fix_high),
-                    label: Text(_isProcessing ? 'Pinoproseso...' : 'Ihiwalay ang Vocals at Minus One'),
-                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+                    label: Text(
+                      _isProcessing ? 'Pinoproseso...' : 'Ihiwalay ang Vocals at Minus One',
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: Theme.of(context).colorScheme.surfaceVariant,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                     ),
                     child: Text(_statusMessage, textAlign: TextAlign.center),
                   ),
                   const SizedBox(height: 20),
                   if (_musicOutputPath != null)
-                    _buildResultCard(title: 'Minus One (Instrumental)', icon: Icons.music_note, filePath: _musicOutputPath!),
+                    _buildResultCard(
+                      title: 'Minus One (Instrumental)',
+                      icon: Icons.music_note,
+                      filePath: _musicOutputPath!,
+                    ),
                   if (_vocalOutputPath != null) ...[
                     const SizedBox(height: 12),
-                    _buildResultCard(title: 'Vocals Only', icon: Icons.mic, filePath: _vocalOutputPath!),
+                    _buildResultCard(
+                      title: 'Vocals Only',
+                      icon: Icons.mic,
+                      filePath: _vocalOutputPath!,
+                    ),
                   ],
                 ],
               ),
@@ -267,7 +370,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildResultCard({required String title, required IconData icon, required String filePath}) {
+  Widget _buildResultCard({
+    required String title,
+    required IconData icon,
+    required String filePath,
+  }) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -276,10 +383,12 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Icon(icon, size: 32),
             const SizedBox(width: 12),
-            Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
+            Expanded(
+              child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ),
             IconButton.filled(
               icon: const Icon(Icons.download),
-              onPressed: () => _saveToDownloads(filePath, title),
+              onPressed: () => _saveToDownloads(filePath),
             ),
           ],
         ),
