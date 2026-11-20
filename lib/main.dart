@@ -74,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _musicOutputPath;
 
   bool _isProcessing = false;
-  String _statusMessage = 'Pumili ng paboritong kanta (MP3, WAV, M4A) para simulang ihiwalay ang boses.';
+  String _statusMessage = 'Select an audio file (MP3, WAV, M4A) to start separating vocals.';
 
   Future<void> _pickAudioFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -87,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _inputFileName = result.files.single.name;
         _vocalOutputPath = null;
         _musicOutputPath = null;
-        _statusMessage = 'Handa nang i-process: $_inputFileName';
+        _statusMessage = 'Ready to process: $_inputFileName';
       });
     }
   }
@@ -99,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _vocalOutputPath = null;
       _musicOutputPath = null;
       _isProcessing = false;
-      _statusMessage = 'Pumili ng kanta para magsimula.';
+      _statusMessage = 'Select an audio file to begin.';
     });
   }
 
@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _isProcessing = true;
       _vocalOutputPath = null;
       _musicOutputPath = null;
-      _statusMessage = 'Ipinapadala ang kanta sa AI server... Sandali lang po.';
+      _statusMessage = 'Uploading audio to AI server... Please wait.';
     });
 
     try {
@@ -136,7 +136,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (uploadResponse.statusCode != 200) {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'Nabigo ang pag-upload (HTTP ${uploadResponse.statusCode}). Pakitiyak na nagre-run ang iyong HF Space.';
+          _statusMessage = 'Upload failed (HTTP ${uploadResponse.statusCode}). Ensure your HF Space is running.';
         });
         return;
       }
@@ -147,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : (uploadedData['path'] ?? uploadedData['url'] ?? '').toString();
 
       setState(() {
-        _statusMessage = 'Pinoproseso na ng AI ang musika at boses... (Maaaring tumagal ng ilang minuto)';
+        _statusMessage = 'AI is separating vocals and music... (This may take a few minutes)';
       });
 
       final predictResponse = await http.post(
@@ -176,23 +176,23 @@ class _HomeScreenState extends State<HomeScreen> {
           _vocalOutputPath = vocalOut;
           _musicOutputPath = musicOut;
           _isProcessing = false;
-          _statusMessage = 'Tagumpay! Hiwalay na ang Vocals at Minus One.';
+          _statusMessage = 'Success! Vocals and Instrumental separated.';
         });
       } else {
         setState(() {
           _isProcessing = false;
-          _statusMessage = 'Nagka-problema sa AI server (HTTP ${predictResponse.statusCode}). Subukan muli.';
+          _statusMessage = 'AI Server error (HTTP ${predictResponse.statusCode}). Please try again.';
         });
       }
     } on TimeoutException {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Nag-timeout ang server. Masyadong mahaba o mabigat ang kanta.';
+        _statusMessage = 'Server timeout. The audio file might be too large or long.';
       });
     } catch (e) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Nabigo ang koneksyon sa server. Suriin ang iyong internet.';
+        _statusMessage = 'Connection failed. Please check your internet connection.';
       });
     }
   }
@@ -232,7 +232,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Nai-save na sa Download folder: $fileName'),
+          content: Text('Saved to Download folder: $fileName'),
           backgroundColor: Colors.teal.shade700,
           behavior: SnackBarBehavior.floating,
         ),
@@ -240,7 +240,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Hindi ma-save: $e')),
+        SnackBar(content: Text('Failed to save: $e')),
       );
     }
   }
@@ -256,12 +256,12 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: Icon(widget.isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded),
             onPressed: widget.onToggleTheme,
-            tooltip: 'Palitan ang Tema',
+            tooltip: 'Toggle Theme',
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: _resetAll,
-            tooltip: 'I-reset ang Lahat',
+            tooltip: 'Reset All',
           ),
         ],
       ),
@@ -307,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPressed: _isProcessing ? null : _pickAudioFile,
                       icon: const Icon(Icons.audio_file_rounded),
                       label: Text(
-                        _inputFileName ?? 'Pumili ng Audio File (MP3, M4A, WAV)',
+                        _inputFileName ?? 'Select Audio File (MP3, M4A, WAV)',
                         style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                       style: OutlinedButton.styleFrom(
@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             )
                           : const Icon(Icons.auto_fix_high_rounded),
                       label: Text(
-                        _isProcessing ? 'Pinoproseso ang Kanta...' : 'Ihiwalay ang Vocals at Minus One',
+                        _isProcessing ? 'Processing Audio...' : 'Separate Vocals & Instrumental',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       style: FilledButton.styleFrom(
@@ -338,7 +338,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (_musicOutputPath != null) ...[
                       _buildResultCard(
                         title: 'Minus One (Instrumental)',
-                        subtitle: 'Handa nang i-download',
+                        subtitle: 'Ready to download',
                         icon: Icons.music_note_rounded,
                         filePath: _musicOutputPath!,
                       ),
@@ -346,8 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                     if (_vocalOutputPath != null)
                       _buildResultCard(
-                        title: 'Vocals Only (Boses Lang)',
-                        subtitle: 'Handa nang i-download',
+                        title: 'Vocals Only',
+                        subtitle: 'Ready to download',
                         icon: Icons.mic_rounded,
                         filePath: _vocalOutputPath!,
                       ),
@@ -408,7 +408,7 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton.filled(
               icon: const Icon(Icons.download_rounded),
               onPressed: () => _saveToDownloads(filePath),
-              tooltip: 'I-save sa Downloads',
+              tooltip: 'Save to Downloads',
             ),
           ],
         ),
