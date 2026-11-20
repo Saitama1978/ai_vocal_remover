@@ -273,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8),
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      color: Theme.of(context).colorScheme.surfaceVariant,
                     ),
                     child: Text(_statusMessage, textAlign: TextAlign.center),
                   ),
