@@ -28,19 +28,19 @@ jobs:
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Force SDK 35 in build.gradle & Permissions
+      - name: Fix SDK 35 & Gradle Config
         run: |
-          # Direktang palitan ang android block sa build.gradle para maging SDK 35
+          # Linisin at itakda nang tuwiran ang compileSdk at targetSdk sa build.gradle
           BUILD_GRADLE="android/app/build.gradle"
           if [ -f "$BUILD_GRADLE" ]; then
-            # Tanggalin ang lumang compile/target sdk kung mayroon man at palitan ng 35
+            # Alisin ang mga lumang linyang nagdudulot ng conflict
             sed -i '/compileSdkVersion/d' "$BUILD_GRADLE" || true
             sed -i '/targetSdkVersion/d' "$BUILD_GRADLE" || true
             sed -i '/minSdkVersion/d' "$BUILD_GRADLE" || true
             sed -i '/minSdk/d' "$BUILD_GRADLE" || true
 
-            # Idagdag ang tamang SDK versions sa loob ng android { ... } block
-            sed -i '/android {/a \    compileSdkVersion 35\n    defaultConfig {\n        minSdkVersion 21\n        targetSdkVersion 35\n    }' "$BUILD_GRADLE" || true
+            # Idagdag ang tamang block sa loob ng android { ... }
+            sed -i '/android {/a \    compileSdkVersion 34\n    defaultConfig {\n        minSdkVersion 21\n        targetSdkVersion 34\n    }' "$BUILD_GRADLE" || true
           fi
 
           # Magdagdag ng internet at storage permissions sa AndroidManifest.xml
