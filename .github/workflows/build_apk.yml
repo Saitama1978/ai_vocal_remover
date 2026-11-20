@@ -28,22 +28,8 @@ jobs:
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Fix SDK 35 & Gradle Config
+      - name: Configure Android Permissions
         run: |
-          # Linisin at itakda nang tuwiran ang compileSdk at targetSdk sa build.gradle
-          BUILD_GRADLE="android/app/build.gradle"
-          if [ -f "$BUILD_GRADLE" ]; then
-            # Alisin ang mga lumang linyang nagdudulot ng conflict
-            sed -i '/compileSdkVersion/d' "$BUILD_GRADLE" || true
-            sed -i '/targetSdkVersion/d' "$BUILD_GRADLE" || true
-            sed -i '/minSdkVersion/d' "$BUILD_GRADLE" || true
-            sed -i '/minSdk/d' "$BUILD_GRADLE" || true
-
-            # Idagdag ang tamang block sa loob ng android { ... }
-            sed -i '/android {/a \    compileSdkVersion 34\n    defaultConfig {\n        minSdkVersion 21\n        targetSdkVersion 34\n    }' "$BUILD_GRADLE" || true
-          fi
-
-          # Magdagdag ng internet at storage permissions sa AndroidManifest.xml
           MANIFEST="android/app/src/main/AndroidManifest.xml"
           if [ -f "$MANIFEST" ]; then
             sed -i 's/<application/<uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"\/>\n    <application/' "$MANIFEST"
