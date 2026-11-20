@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
@@ -64,30 +63,13 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isProcessing = false;
   String _statusMessage = 'Pumili ng kanta (MP3, WAV, M4A) para ihiwalay ang boses.';
 
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  StreamSubscription? _playerCompleteSubscription;
-  String? _currentlyPlaying;
-
-  @override
-  void initState() {
-    super.initState();
-    _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) {
-      if (mounted) {
-        setState(() => _currentlyPlaying = null);
-      }
-    });
-  }
-
   @override
   void dispose() {
-    _playerCompleteSubscription?.cancel();
-    _audioPlayer.dispose();
     _apiUrlController.dispose();
     super.dispose();
   }
 
   Future<void> _pickAudioFile() async {
-    await _stopAudio();
     FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.audio);
 
     if (result != null && result.files.single.path != null) {
@@ -101,8 +83,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _resetAll() async {
-    await _stopAudio();
+  void _resetAll() {
     setState(() {
       _inputFilePath = null;
       _inputFileName = null;
@@ -115,7 +96,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _processAudio() async {
     if (_inputFilePath == null) return;
-    await _stopAudio();
 
     setState(() {
       _isProcessing = true;
@@ -179,21 +159,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final res = await http.get(Uri.parse(raw));
       await File(outPath).writeAsBytes(res.bodyBytes);
     }
-  }
-
-  Future<void> _togglePlay(String tag, String filePath) async {
-    if (_currentlyPlaying == tag) {
-      await _stopAudio();
-    } else {
-      await _audioPlayer.stop();
-      await _audioPlayer.play(DeviceFileSource(filePath));
-      setState(() { _currentlyPlaying = tag; });
-    }
-  }
-
-  Future<void> _stopAudio() async {
-    await _audioPlayer.stop();
-    if (mounted) setState(() => _currentlyPlaying = null);
   }
 
   Future<void> _saveToDownloads(String sourcePath, String label) async {
@@ -279,10 +244,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 20),
                   if (_musicOutputPath != null)
-                    _buildResultCard(title: 'Minus One (Instrumental)', icon: Icons.music_note, tag: 'music', filePath: _musicOutputPath!),
+                    _buildResultCard(title: 'Minus One (Instrumental)', icon: Icons.music_note, filePath: _musicOutputPath!),
                   if (_vocalOutputPath != null) ...[
                     const SizedBox(height: 12),
-                    _buildResultCard(title: 'Vocals Only', icon: Icons.mic, tag: 'vocal', filePath: _vocalOutputPath!),
+                    _buildResultCard(title: 'Vocals Only', icon: Icons.mic, filePath: _vocalOutputPath!),
                   ],
                 ],
               ),
@@ -302,8 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildResultCard({required String title, required IconData icon, required String tag, required String filePath}) {
-    final bool isPlaying = _currentlyPlaying == tag;
+  Widget _buildResultCard({required String title, required IconData icon, required String filePath}) {
     return Card(
       elevation: 2,
       child: Padding(
@@ -313,11 +277,6 @@ class _HomeScreenState extends State<HomeScreen> {
             Icon(icon, size: 32),
             const SizedBox(width: 12),
             Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
-            IconButton.filledTonal(
-              icon: Icon(isPlaying ? Icons.stop : Icons.play_arrow),
-              onPressed: () => _togglePlay(tag, filePath),
-            ),
-            const SizedBox(width: 8),
             IconButton.filled(
               icon: const Icon(Icons.download),
               onPressed: () => _saveToDownloads(filePath, title),
