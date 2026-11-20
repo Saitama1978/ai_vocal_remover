@@ -28,14 +28,12 @@ jobs:
       - name: Initialize Android Project Files
         run: flutter create --platforms=android --org com.renantefullo .
 
-      - name: Configure Android SDK & Permissions
+      - name: Configure Android MinSdk & Permissions
         run: |
-          # Itakda ang tamang compile, target, at min SDK sa build.gradle
+          # Itakda lamang ang tamang minSdk sa build.gradle para maiwasan ang extension error
           if [ -f "android/app/build.gradle" ]; then
-            sed -i 's/compileSdkVersion.*/compileSdkVersion 34/g' android/app/build.gradle || true
-            sed -i 's/targetSdkVersion.*/targetSdkVersion 34/g' android/app/build.gradle || true
-            sed -i 's/minSdk = .*/minSdk = 21/g' android/app/build.gradle || true
-            sed -i 's/minSdkVersion.*/minSdkVersion 21/g' android/app/build.gradle || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdkVersion = 21/g' android/app/build.gradle || true
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 21/g' android/app/build.gradle || true
           fi
 
           # Magdagdag ng internet at storage permissions sa AndroidManifest.xml
