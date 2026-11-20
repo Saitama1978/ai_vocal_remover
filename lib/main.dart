@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -64,10 +65,22 @@ class _HomeScreenState extends State<HomeScreen> {
   String _statusMessage = 'Pumili ng kanta (MP3, WAV, M4A) para ihiwalay ang boses.';
 
   final AudioPlayer _audioPlayer = AudioPlayer();
+  StreamSubscription? _playerCompleteSubscription;
   String? _currentlyPlaying;
 
   @override
+  void initState() {
+    super.initState();
+    _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() => _currentlyPlaying = null);
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _playerCompleteSubscription?.cancel();
     _audioPlayer.dispose();
     _apiUrlController.dispose();
     super.dispose();
@@ -175,9 +188,6 @@ class _HomeScreenState extends State<HomeScreen> {
       await _audioPlayer.stop();
       await _audioPlayer.play(DeviceFileSource(filePath));
       setState(() { _currentlyPlaying = tag; });
-      _audioPlayer.onPlayerComplete.listen((_) {
-        if (mounted) setState(() => _currentlyPlaying = null);
-      });
     }
   }
 
